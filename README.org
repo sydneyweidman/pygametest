@@ -1,0 +1,31 @@
+* mapdata tests
+
+#+BEGIN_SRC python :results output pp
+from mapdata import *
+
+bpath = []
+bpath.append(START[BLUE])
+
+print bpath
+
+print START[RED] in PATH
+#+END_SRC
+
+#+RESULTS:
+: [(116, 108)]
+: False
+
+#+BEGIN_SRC python :results output pp
+from mapdata import *
+
+for COL in COURSE:
+    assert(len(COURSE[COL]) == 32)
+    print "%s is %s points" % (COLOR_NAME[COL], len(COURSE[COL]),)
+#+END_SRC
+
+#+RESULTS:
+: green is 32 points
+: red is 32 points
+: yellow is 32 points
+: blue is 32 points
+
