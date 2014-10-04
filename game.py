@@ -2,12 +2,13 @@ import pygame
 import sys
 import mapdata
 import optparse
+import random
 
 parser = optparse.OptionParser()
-parser.add_option('-n', '--name')
-parser.add_option('-c', '--color')
+parser.add_option('-n', '--name', default=[], action='append')
+parser.add_option('-c', '--color', default=[], action='append')
 
-from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN, K_a, K_n, K_q
+from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN, K_a, K_n, K_q, K_s
 
 class Player(object):
 
@@ -22,15 +23,19 @@ class Player(object):
         self.name = name
         self.color = color
         self.pegs = []
+        self.is_my_turn = False
         for p in mapdata.HOME[color]:
             self.pegs.append(GamePeg(self.screen, color, p))
         pygame.display.update()
 
-    def do_move(self, ):
-        """Process a player's turn: Roll the dice, wait for move selection'
+    def roll(self):
+        """Roll the die
         """
-        pass
+        return random.randint(1,7)
 
+    def move(self, peg, value):
+        peg.move(value)
+    
 class GameBoard(object):
     """A game board
     """
@@ -41,23 +46,23 @@ class GameBoard(object):
         """Create and initialize the game board
         """
         self.screen = pygame.display.set_mode(mode)
-        self.background = pygame.image.load('bgnd.bmp').convert()
+        self.background = pygame.image.load('images/bgnd.bmp').convert()
         self.started = False
         self.players = []
         self.player_count = 0
         self.whose_turn = 0
         self.colors_in_use = []
-
+        self.number_rolled = None
+        
     def take_turn(self):
         """Process a player's turn
         """
         if not self.started:
             self.started = True
-        try:
-            player = self.players[self.whose_turn]
-            player.do_move()
-        except IndexError:
+        if self.whose_turn >= self.player_count:
             self.whose_turn = 0
+        player = self.players[self.whose_turn]
+        self.number_rolled = player.roll()
         self.whose_turn += 1
         
     def add_player(self, name, color):
@@ -111,13 +116,9 @@ def main(*args, **kwargs):
     screen = game.screen
     screen.blit(game.background, (0,0))
     if 'name' in kwargs:
-        name = kwargs['name']
-    else:
-        name = 'Player 1'
-    try:
-        color = mapdata.COLOR_VALUE[kwargs['color']]
-    except KeyError:
-        color = mapdata.BLUE
+        for idx, n in enumerate(kwargs['name']):
+            color = mapdata.COLOR_VALUE[kwargs['color'][idx]]
+            game.add_player(n,color)
     pegpos = 0
     pegobj = GamePeg(screen, color, mapdata.HOME[color][0])
     pygame.display.update()
@@ -130,6 +131,13 @@ def main(*args, **kwargs):
                 color = mapdata.COLOR_VALUE[colorname]
                 game.add_player(name, color)
                 pegobj = GamePeg(screen, color, mapdata.HOME[color][0])
+                continue
+            if event.type == KEYDOWN and event.key == K_s:
+                print "Starting game"
+                for player in game.players:
+                    print "%s is %s" % (player.name, mapdata.COLOR_NAME[player.color],)
+                print "It is %s's turn'" % (game.players[game.whose_turn].name,)
+                print "Click the bubble to start your turn"
                 continue
             if event.type == KEYDOWN and event.key == K_n:
                 if not game.players:
@@ -144,9 +152,9 @@ def main(*args, **kwargs):
                 print peg
                 pegobj.move(peg)
                 pegpos += 1
-                continue
             if event.type == MOUSEBUTTONDOWN:
                 print event.pos
+                continue
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
                 sys.exit()
         pygame.display.update()
