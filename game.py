@@ -1,14 +1,16 @@
-import pygame
-import sys
-import mapdata
 import optparse
 import random
+import sys
+
+import pygame
+from pygame import Rect
+from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN, K_n, K_q, K_s
+
+import mapdata
 
 parser = optparse.OptionParser()
 parser.add_option('-n', '--name', default=[], action='append')
 parser.add_option('-c', '--color', default=[], action='append')
-
-from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN, K_a, K_n, K_q, K_s
 
 class Player(object):
 
@@ -23,15 +25,13 @@ class Player(object):
         self.name = name
         self.color = color
         self.pegs = []
-        self.is_my_turn = False
         for p in mapdata.HOME[color]:
-            self.pegs.append(GamePeg(self.screen, color, p))
-        pygame.display.update()
+            self.pegs.append(GamePeg(color, p))
 
     def roll(self):
         """Roll the die
         """
-        return random.randint(1,7)
+        return random.randint(1,6)
 
     def move(self, peg, value):
         peg.move(value)
@@ -39,6 +39,7 @@ class Player(object):
 class GameBoard(object):
     """A game board
     """
+    bubble = Rect(290,200,100,100)
 
     max_players = 4
 
@@ -64,7 +65,8 @@ class GameBoard(object):
         player = self.players[self.whose_turn]
         self.number_rolled = player.roll()
         self.whose_turn += 1
-        
+        return self.number_rolled
+    
     def add_player(self, name, color):
         """Add a player to the game
         
@@ -80,29 +82,38 @@ class GameBoard(object):
                 raise ValueError("The color %s is already taken by %s" % (mapdata.COLOR_NAME[color], p.name))
         if len(self.players) >= self.max_players:
             raise ValueError("No more than %s players can join" % self.max_players)
-        self.players.append(Player(self.screen, name, color))
-        self.colors_in_use.append(color)
+        player = Player(self.screen, name, color)
+        self.players.append(player)
         self.player_count += 1
+        return player
 
-class GamePeg(object):
+class GamePeg(pygame.sprite.Sprite):
     """A peg in the board. There can be 0 - 4 in play at any given time.
     """
     radius = 14
-    def __init__(self, screen, color, startpos):
+    
+    def __init__(self, color, pos):
         """
         """
-        self.screen = screen
+        pygame.sprite.Sprite.__init__(self)
+        self.image = pygame.Surface((20,20))
+        self.pos = pos
         self.color = color
-        self.pos = startpos
-        pygame.draw.circle(self.screen, self.color, self.pos, self.radius)
-        pygame.display.update()
+        self.image.fill(self.color)
+        self.rect = pygame.draw.circle(self.image, self.color, self.pos, self.radius)
         
+    def draw(self):
+        self.rect = pygame.draw.circle(self.image, self.color, self.rect.center, self.radius)
+
+    def update(self):
+        self.image.blit(self.image, self.rect)
+        #self.rect = pygame.draw.circle(self.image, self.color, self.rect.center, self.radius)
+
     def move(self, newpos):
         """Move the peg to a new position.
         """
-        self.pos = newpos
-        pygame.draw.circle(self.screen, self.color, self.pos, self.radius)
-
+        self.rect.center = (newpos[0], newpos[1])
+        
 def main(*args, **kwargs):
     """Start the main loop
     
@@ -120,29 +131,22 @@ def main(*args, **kwargs):
             color = mapdata.COLOR_VALUE[kwargs['color'][idx]]
             game.add_player(n,color)
     pegpos = 0
-    pegobj = GamePeg(screen, color, mapdata.HOME[color][0])
-    pygame.display.update()
+    pegobj = GamePeg(color, mapdata.HOME[color][0])
+    allpegs = pygame.sprite.Group(pegobj)
+    for p in game.players:
+        for pg in p.pegs:
+            pg.draw()
+            allpegs.add(pg)
     while 1:
         for event in pygame.event.get():
-            if event.type == KEYDOWN and event.key == K_a:
-                # add a player
-                name = raw_input('Name: ')
-                colorname = raw_input('Choose color (red, yellow, blue, or green): ')
-                color = mapdata.COLOR_VALUE[colorname]
-                game.add_player(name, color)
-                pegobj = GamePeg(screen, color, mapdata.HOME[color][0])
-                continue
             if event.type == KEYDOWN and event.key == K_s:
                 print "Starting game"
                 for player in game.players:
                     print "%s is %s" % (player.name, mapdata.COLOR_NAME[player.color],)
-                print "It is %s's turn'" % (game.players[game.whose_turn].name,)
+                print "It is %s's turn" % (game.players[game.whose_turn].name,)
                 print "Click the bubble to start your turn"
                 continue
             if event.type == KEYDOWN and event.key == K_n:
-                if not game.players:
-                    print "Please add a player first"
-                    continue
                 screen.blit(game.background, (0,0))
                 try:
                     peg = mapdata.COURSE[color][pegpos]
@@ -152,12 +156,19 @@ def main(*args, **kwargs):
                 print peg
                 pegobj.move(peg)
                 pegpos += 1
+                continue
             if event.type == MOUSEBUTTONDOWN:
                 print event.pos
+                if game.bubble.collidepoint(event.pos):
+                    roll = game.take_turn()
+                    print "Player rolled %s" % (roll,)
                 continue
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
                 sys.exit()
-        pygame.display.update()
+        allpegs.clear(game.screen, game.background)
+        allpegs.update()
+        allpegs.draw(game.screen)
+        pygame.display.flip()
         pygame.time.delay(100)
 
 if __name__ == '__main__':
