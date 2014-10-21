@@ -1,34 +1,11 @@
 * get_rect for mouse clicks
 
-#+BEGIN_SRC python
-import sys
-import pygame
-from pygame.locals import *
-
-pygame.init()
-screen = pygame.display.set_mode((640,480))
-pygame.display.set_caption('This is a game')
-background = pygame.Surface(screen.get_size())
-background = background.convert()
-background.fill((250,250,250))
-font = pygame.font.Font(None,36)
-text = font.render('Pop-o-Matic', 1, (10,10,10))
-textpos = text.get_rect()
-textpos.centerx = background.get_rect().centerx
-background.blit(text, textpos)
-screen.blit(background, (0,0))
-pygame.display.update()
-
-while 1:
-    for event in pygame.event.get():
-        if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
-            sys.exit()
-    pygame.display.update()
-    pygame.time.delay(100)
+#+BEGIN_SRC python :results nil
 
 #+END_SRC
 
 #+RESULTS:
+
 * key constants
 
 #+BEGIN_SRC python :results output ppx

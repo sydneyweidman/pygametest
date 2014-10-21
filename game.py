@@ -28,6 +28,10 @@ class Player(object):
         for p in mapdata.HOME[color]:
             self.pegs.append(GamePeg(color, p))
 
+    def nextpeg(self):
+        for p in self.pegs:
+            yield p
+
     def roll(self):
         """Roll the die
         """
@@ -60,11 +64,11 @@ class GameBoard(object):
         """
         if not self.started:
             self.started = True
+        self.whose_turn += 1
         if self.whose_turn >= self.player_count:
             self.whose_turn = 0
         player = self.players[self.whose_turn]
         self.number_rolled = player.roll()
-        self.whose_turn += 1
         return self.number_rolled
     
     def add_player(self, name, color):
@@ -90,29 +94,30 @@ class GameBoard(object):
 class GamePeg(pygame.sprite.Sprite):
     """A peg in the board. There can be 0 - 4 in play at any given time.
     """
-    radius = 14
+    radius = 10
     
     def __init__(self, color, pos):
         """
         """
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((20,20))
+        self.image = pygame.Surface((24,24))
         self.pos = pos
         self.color = color
         self.image.fill(self.color)
-        self.rect = pygame.draw.circle(self.image, self.color, self.pos, self.radius)
+        self.rect = pygame.draw.circle(self.image, self.color, self.pos, self.radius, 0)
         
-    def draw(self):
-        self.rect = pygame.draw.circle(self.image, self.color, self.rect.center, self.radius)
+    def draw(self, screen):
+        screen.blit(self.image,(0,0))
+        self.rect = pygame.draw.circle(screen, self.color, self.pos, self.radius, 0)
 
-    def update(self):
-        self.image.blit(self.image, self.rect)
-        #self.rect = pygame.draw.circle(self.image, self.color, self.rect.center, self.radius)
-
+    def update(self, screen):
+        screen.blit(self.image, (0,0))
+        self.rect = pygame.draw.circle(self.image, self.color, self.pos, self.radius, 0)
+        
     def move(self, newpos):
         """Move the peg to a new position.
         """
-        self.rect.center = (newpos[0], newpos[1])
+        self.pos = newpos
         
 def main(*args, **kwargs):
     """Start the main loop
@@ -135,7 +140,6 @@ def main(*args, **kwargs):
     allpegs = pygame.sprite.Group(pegobj)
     for p in game.players:
         for pg in p.pegs:
-            pg.draw()
             allpegs.add(pg)
     while 1:
         for event in pygame.event.get():
@@ -161,14 +165,21 @@ def main(*args, **kwargs):
                 print event.pos
                 if game.bubble.collidepoint(event.pos):
                     roll = game.take_turn()
-                    print "Player rolled %s" % (roll,)
+                    player = game.players[game.whose_turn]
+                    print "%s rolled %s" % (player.name, roll,)
+                    if roll == 6:
+                        p = player.nextpeg().next()
+                        p.move(mapdata.COURSE[player.color][0])
+                        print "Click again, %s" % (player.name,)
+                    else:
+                        pass
                 continue
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
                 sys.exit()
         allpegs.clear(game.screen, game.background)
-        allpegs.update()
         allpegs.draw(game.screen)
-        pygame.display.flip()
+        allpegs.update(game.screen)
+        pygame.display.update()
         pygame.time.delay(100)
 
 if __name__ == '__main__':
