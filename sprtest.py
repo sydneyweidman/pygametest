@@ -10,8 +10,9 @@ HEIGHT = 768
 FPS = 60
 STEP = 1
 drag = 0.999
-elasticity = 0.70
+elasticity = 0.80
 gravity = (-math.pi/2, 0.2)
+bgcolor = pygame.Color('light grey')
 
 def addVectors((angle1, length1), (angle2, length2)):
     x  = math.sin(angle1) * length1 + math.sin(angle2) * length2
@@ -40,8 +41,23 @@ class Particle(Sprite):
             self.x, self.y = [int(i) for i in pos]
         else:
             self.x, self.y = [random.randint(0,i) for i in screen.get_size()]
-            
+
+    def _get_x(self):
+        return self.rect.centerx
+
+    def _set_x(self, x):
+        self.rect.centerx = x
+    x = property(_get_x, _set_x)
+
+    def _get_y(self):
+        return self.rect.centery
+
+    def _set_y(self, y):
+        self.rect.centery = y
+    y = property(_get_y, _set_y)
+    
     def display(self):
+        self.image.fill(bgcolor)
         pygame.draw.circle(self.screen, self.color, (self.x, self.y), self.radius, 0)
 
     def _randcolor(self):
@@ -95,11 +111,12 @@ class App(object):
     def on_execute(self):
         self.opts, self.args = self.parser.parse_args()
         self.FPS = self.opts.framerate
+        selected_particle = None
         pygame.init()
         clock = pygame.time.Clock()
         screen = pygame.display.set_mode((self.WIDTH,self.HEIGHT))
         background = pygame.Surface(screen.get_size())
-        background.fill(pygame.Color('light grey'))
+        background.fill(bgcolor)
         font = pygame.font.Font(None,36)
         text = font.render('Bubbles', 1, (10,10,10))
         textpos = text.get_rect()
@@ -127,16 +144,19 @@ class App(object):
                 if event.type == pygame.locals.KEYDOWN and event.key == pygame.locals.K_a:
                     array.add(Particle(screen))
                 if event.type == pygame.locals.MOUSEBUTTONDOWN:
-                    if lastpos:
-                        screen.blit(background,(0,0))
                     lastpos = pygame.mouse.get_pos()
-                    pygame.draw.circle(screen,(255,0,255), lastpos, 30, 0)
-            background.fill(pygame.Color('light grey'))
+                    for sp in array:
+                        if sp.rect.collidepoint(lastpos):
+                            selected_particle = sp
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    selected_particle = None
+            background.fill(bgcolor)
             screen.blit(background, (0,0))
             array.clear(screen,background)
             for sp in array:
-                sp.move()
-                sp.bounce()
+                if not sp is selected_particle:
+                    sp.move()
+                    sp.bounce()
                 if self.opts.random and loopcount % 500:
                     sp.change_speed(random.randint(-self.STEP,self.STEP))
                     sp.change_direction(random.randint(-self.STEP,self.STEP))
@@ -146,9 +166,9 @@ class App(object):
             array.update()
             pygame.display.flip()
             clock.tick(self.FPS)
+        pygame.quit()
 
 if __name__ == '__main__':
     theApp = App()
     theApp.on_execute()
-    pygame.quit()
 
