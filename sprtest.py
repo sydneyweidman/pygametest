@@ -122,7 +122,6 @@ class App(object):
         textpos = text.get_rect()
         textpos.centerx = background.get_rect().centerx
         background.blit(text, textpos)
-        screen.blit(background, (0,0))
         pygame.display.update()
         lastpos = None
         running = True
@@ -155,6 +154,13 @@ class App(object):
             array.clear(screen,background)
             for sp in array:
                 if not sp is selected_particle:
+                    for p in array:
+                        if p.rect.colliderect(sp) and not p is sp:
+                            (p.speed, sp.speed,) = (sp.speed, p.speed,)
+                            tangent = math.atan2(p.x - sp.x, p.y - sp.y)
+                            p.direction = 2*tangent - p.direction
+                            sp.direction = 2*tangent - sp.direction
+                            # TODO: get rid of stickiness
                     sp.move()
                     sp.bounce()
                     if self.opts.random and loopcount % 500:
