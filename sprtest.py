@@ -157,9 +157,9 @@ class App(object):
                 if not sp is selected_particle:
                     sp.move()
                     sp.bounce()
-                if self.opts.random and loopcount % 500:
-                    sp.change_speed(random.randint(-self.STEP,self.STEP))
-                    sp.change_direction(random.randint(-self.STEP,self.STEP))
+                    if self.opts.random and loopcount % 500:
+                        sp.speed += random.randint(-self.STEP,self.STEP)
+                        sp.direction += random.randint(-self.STEP,self.STEP)
             loopcount += 1
             pygame.display.set_caption('Running at %s FPS' % (self.FPS,))
             array.draw(screen)
