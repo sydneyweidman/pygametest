@@ -1,127 +1,158 @@
 import optparse
-import random
 import sys
-
 import pygame
-from pygame import Rect
-from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN, K_n, K_q, K_s
-
-import mapdata
+from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN
+from pygame.locals import K_n, K_q, K_s, K_p
+from mapdata import HOME, stars, BLUE, GREEN
 
 parser = optparse.OptionParser()
-parser.add_option('-n', '--name', default=[], action='append')
-parser.add_option('-c', '--color', default=[], action='append')
 
-class Player(object):
+WINDOW = pygame.Rect(0, 0, 690, 710)
 
-    def __init__(self, screen, name, color):
-        """Create a player
-        
-        Arguments:
-        - `name`: The player's name'
-        - `color`: The player's color'
-        """
-        self.screen = screen
-        self.name = name
-        self.color = color
-        self.pegs = []
-        for p in mapdata.HOME[color]:
-            self.pegs.append(GamePeg(color, p))
+class Slot(pygame.Rect):
 
-    def nextpeg(self):
-        for p in self.pegs:
-            yield p
+    def __init__(self, stype, top, left, width=40, height=40, nextslot=None, prevslot=None, ctrslot=None, token=None):
+        super(Slot, self).__init__((top, left, width, height))
+        self.stype = stype
+        self.nextslot = nextslot
+        self.prevslot = prevslot
+        self.ctrslot = ctrslot
+        self.token = token
 
-    def roll(self):
-        """Roll the die
-        """
-        return random.randint(1,6)
-
-    def move(self, peg, value):
-        peg.move(value)
-    
 class GameBoard(object):
     """A game board
     """
-    bubble = Rect(290,200,100,100)
 
-    max_players = 4
-
-    def __init__(self, mode=(640,480)):
+    def __init__(self, mode=(690,710)):
         """Create and initialize the game board
         """
         self.screen = pygame.display.set_mode(mode)
-        self.background = pygame.image.load('images/bgnd.bmp').convert()
-        self.started = False
-        self.players = []
-        self.player_count = 0
-        self.whose_turn = 0
-        self.colors_in_use = []
-        self.number_rolled = None
+        self.background = pygame.image.load('images/board.png').convert()
+        self.slots = []
+        self.tokens = {}
+        self._setup_slots()
+        self._setup_tokens()
+        self.current_color = BLUE
+        self.active_token = self.tokens[self.current_color].sprites()[0]
+        self.active_token.selected = True
+        self.current_slot = self.slots[0]
         
-    def take_turn(self):
-        """Process a player's turn
-        """
-        if not self.started:
-            self.started = True
-        self.whose_turn += 1
-        if self.whose_turn >= self.player_count:
-            self.whose_turn = 0
-        player = self.players[self.whose_turn]
-        self.number_rolled = player.roll()
-        return self.number_rolled
-    
-    def add_player(self, name, color):
-        """Add a player to the game
-        
-        Arguments:
-        - `name`: Player's name'
-        - `color`: One of mapdata.RED, mapdata.BLUE, mapdata.GREEN, mapdata.YELLOW
-        """
-        # Check that name and color are unique
-        for p in self.players:
-            if name == p.name:
-                raise ValueError("The name %s is already in use" % (name,))
-            if color == p.color:
-                raise ValueError("The color %s is already taken by %s" % (mapdata.COLOR_NAME[color], p.name))
-        if len(self.players) >= self.max_players:
-            raise ValueError("No more than %s players can join" % self.max_players)
-        player = Player(self.screen, name, color)
-        self.players.append(player)
-        self.player_count += 1
-        return player
+    def _setup_slots(self):
+        for s in stars:
+            if s != 'center':
+                self.slots.append(Slot('ring', *stars[s][0]))
+            else:
+                self.slots.append(Slot('center', *stars['center'][0]))
+        for idx, slot in enumerate(self.slots):
+            slot.nextslot = self.slots[(idx + 1) % 8]
+            slot.prevslot = self.slots[(idx - 1) % 8]
 
-class GamePeg(pygame.sprite.Sprite):
-    """A peg in the board. There can be 0 - 4 in play at any given time.
+    def _setup_tokens(self):
+        # set up tokens
+        for color in HOME:
+            self.tokens[color] = pygame.sprite.Group()
+            for tokenpos in HOME[color]:
+                token = Token(self.screen, color, tokenpos)
+                self.tokens[color].add(token)
+
+    def onKeyDown(self, event):
+        """Handle keyboard events"""
+        if event.key == K_s:
+            print "Starting game"
+            return
+        if event.key == K_n:
+            if self.current_slot.nextslot.token:
+                print "That space is occupied"
+                return
+            self.current_slot = self.current_slot.nextslot
+            self.screen.blit(self.background, (0,0))
+            self.active_token.move((self.current_slot.x, self.current_slot.y))
+            self.active_token.draw()
+            return
+        if event.key == K_p:
+            if self.current_slot.prevslot.token:
+                print "That space is occupied"
+                return
+            self.current_slot = self.current_slot.prevslot
+            self.screen.blit(self.background, (0,0))
+            self.active_token.move((self.current_slot.x, self.current_slot.y))
+            self.active_token.draw()
+            return
+        if event.key == K_q:
+            self.onQuit(event)
+            
+    def onMouseButtonDown(self, event):
+        """Handle mouse events"""
+        print "Click: %s" % (event.pos,)
+        # if a token has been selected previously, move it to the destination of the click
+        # as long as the spot is not occupied
+        if self.active_token:
+            if self.active_token.selected:
+                self.active_token.selected = False
+            for slot in self.slots:
+                print "Slot %s" % slot
+                if slot.collidepoint(event.pos):
+                    print "Hit slot"
+                    if slot.token:
+                        print "That space is occupied"
+                        return
+                    self.active_token.move((slot.x, slot.y))
+                    slot.token = self.active_token
+                    self.active_token.selected = False
+                    self.active_token = None
+                    break
+        else:
+            for color in HOME:
+                for token in self.tokens[color]:
+                    if token.rect.collidepoint(event.pos):
+                        print "hit"
+                        self.active_token = token
+                        token.selected = True
+        return
+
+    def onQuit(self, event):
+        sys.exit()
+        
+class Token(pygame.sprite.Sprite):
+    """A peg in the board. 3 Tokens are placed on the board at the beginning of the game.
     """
-    radius = 10
-    
-    def __init__(self, color, pos):
+    radius = 20
+
+    def __init__(self, screen, color, pos):
         """
         """
         pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((24,24))
+        self.image = pygame.Surface((40, 40))
+        self.screen = screen
         self.pos = pos
         self.color = color
-        self.image.fill(self.color)
-        self.rect = pygame.draw.circle(self.image, self.color, self.pos, self.radius, 0)
-        
-    def draw(self, screen):
-        screen.blit(self.image,(0,0))
-        self.rect = pygame.draw.circle(screen, self.color, self.pos, self.radius, 0)
+        self.selected = False
+        self.rect = pygame.draw.circle(self.screen, self.color, self.pos, self.radius, 0)
+        self.image.fill((255,255,255,255))
 
-    def update(self, screen):
-        screen.blit(self.image, (0,0))
-        self.rect = pygame.draw.circle(self.image, self.color, self.pos, self.radius, 0)
-        
-    def move(self, newpos):
+    def _draw(self):
+        self.rect = pygame.draw.circle(self.screen, self.color, self.pos, self.radius, 0)
+        if self.selected:
+            self.image.fill((0, 0, 0, 0))
+        else:
+            self.image.fill((255, 255, 255, 255))
+
+    def draw(self):
+        self._draw()
+
+    def update(self):
+        self._draw()
+
+    def move(self, to_slot):
         """Move the peg to a new position.
         """
-        self.pos = newpos
-        
+        self.pos = to_slot
+        self.rect = to_slot
+
+
 def main(*args, **kwargs):
     """Start the main loop
-    
+
     Arguments:
     - `*args`:
     - `**kwargs`:
@@ -129,56 +160,22 @@ def main(*args, **kwargs):
     print kwargs
     pygame.init()
     game = GameBoard()
+    active_token = None
     screen = game.screen
     screen.blit(game.background, (0,0))
-    if 'name' in kwargs:
-        for idx, n in enumerate(kwargs['name']):
-            color = mapdata.COLOR_VALUE[kwargs['color'][idx]]
-            game.add_player(n,color)
-    pegpos = 0
-    pegobj = GamePeg(color, mapdata.HOME[color][0])
-    allpegs = pygame.sprite.Group(pegobj)
-    for p in game.players:
-        for pg in p.pegs:
-            allpegs.add(pg)
+    slot = game.slots[0]
     while 1:
         for event in pygame.event.get():
-            if event.type == KEYDOWN and event.key == K_s:
-                print "Starting game"
-                for player in game.players:
-                    print "%s is %s" % (player.name, mapdata.COLOR_NAME[player.color],)
-                print "It is %s's turn" % (game.players[game.whose_turn].name,)
-                print "Click the bubble to start your turn"
-                continue
-            if event.type == KEYDOWN and event.key == K_n:
-                screen.blit(game.background, (0,0))
-                try:
-                    peg = mapdata.COURSE[color][pegpos]
-                except IndexError:
-                    pegpos = 0
-                    peg = mapdata.COURSE[color][pegpos]
-                print peg
-                pegobj.move(peg)
-                pegpos += 1
-                continue
+            if event.type == KEYDOWN:
+                game.onKeyDown(event)
             if event.type == MOUSEBUTTONDOWN:
-                print event.pos
-                if game.bubble.collidepoint(event.pos):
-                    roll = game.take_turn()
-                    player = game.players[game.whose_turn]
-                    print "%s rolled %s" % (player.name, roll,)
-                    if roll == 6:
-                        p = player.nextpeg().next()
-                        p.move(mapdata.COURSE[player.color][0])
-                        print "Click again, %s" % (player.name,)
-                    else:
-                        pass
-                continue
-            if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
-                sys.exit()
-        allpegs.clear(game.screen, game.background)
-        allpegs.draw(game.screen)
-        allpegs.update(game.screen)
+                game.onMouseButtonDown(event)
+            if event.type == QUIT:
+                game.onQuit(event)
+        for color in HOME:
+            game.tokens[color].clear(game.screen, game.background)
+            game.tokens[color].draw(game.screen)
+            game.tokens[color].update()
         pygame.display.update()
         pygame.time.delay(100)
 

@@ -155,7 +155,9 @@ class App(object):
             for sp in array:
                 if not sp is selected_particle:
                     for p in array:
-                        if p.rect.colliderect(sp) and not p is sp:
+                        if p is sp:
+                            continue
+                        if math.hypot(p.x - sp.x, p.y - sp.y) <= p.diameter:
                             (p.speed, sp.speed,) = (sp.speed, p.speed,)
                             tangent = math.atan2(p.x - sp.x, p.y - sp.y)
                             p.direction = 2*tangent - p.direction
