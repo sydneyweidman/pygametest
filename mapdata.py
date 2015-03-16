@@ -1,9 +1,10 @@
 import pygame
 
-STATE = {'start':  0,
-         'setup':  1,
-         'battle': 2,
-         'end':    3,
+STATE = {
+         'blue_select': 1,
+         'blue_move': 2,
+         'green_select': 3,
+         'green_move': 4,
          }
 
 GREEN = pygame.color.THECOLORS['green']
@@ -32,6 +33,12 @@ stars = {
     'seven':  (205, 681),
     'eight':  ( 18, 491),
 }
+
+winners = [(stars['one'], stars['center'], stars['five']),
+           (stars['two'], stars['center'], stars['six']),
+           (stars['three'], stars['center'], stars['seven']),
+           (stars['four'], stars['center'], stars['eight']),
+           ]
 
 ring = 'one two three four five six seven eight'.split()
 

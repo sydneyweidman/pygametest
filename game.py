@@ -1,17 +1,18 @@
+import time
 import optparse
 import sys
 import pygame
 from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN
-from pygame.locals import K_n, K_q, K_r, K_s, K_p, K_ESCAPE
+from pygame.locals import K_n, K_q, K_r, K_p
 from pygame.locals import K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8
-from mapdata import stars, ring, tokens, BLUE, GREEN, BLACK, WHITE, COLOR_VALUE, STATE
+from mapdata import stars, ring, tokens, winners, BLUE, GREEN, BLACK, WHITE, COLOR_VALUE, STATE
 
 parser = optparse.OptionParser()
 
 H = 800
 W = 690
 H_BGND = 710
-H_MSG = 90
+H_MSG = 9
 
 TOKEN_SIZE = 40
 SLOT_SIZE = 20
@@ -61,9 +62,23 @@ class Token(pygame.sprite.Sprite):
         self.screen = screen
         self.pos = pos
         self.color = color
-        self.selected = False
+        self.selectable = False
+        self._selected = False
         self.rect = pygame.draw.circle(self.screen, self.color, self.pos, self.radius, 0)
         self.screen.blit(self.image, self.rect)
+
+    @property
+    def selected(self):
+        return self._selected
+
+    @selected.setter
+    def selected(self, value):
+        if type(value) == bool:
+            self._selected = value
+        else:
+            raise ValueError("The selected property must be True or False")
+        if self.selectable and value == True:
+            self._selected = True
 
     def _draw(self):
         if self.selected:
@@ -85,6 +100,42 @@ class Token(pygame.sprite.Sprite):
         self.rect = to_slot
 
 
+class MessageArea(pygame.Surface):
+
+    def __init__(self, top, left, height, width, initial_text=None, margin=10,
+                 duration=5, fg_color=BLACK, bg_color=WHITE, font_size=FONT_SIZE,
+                 font=None):
+        self.height = height
+        self.top = top
+        self.left = left
+        self.width = width
+        self.bg_color = bg_color
+        self.fg_color = fg_color
+        self.font_size = font_size
+        self.initial_text = initial_text
+        self.margin = margin
+        self.duration = duration
+        self.font = font
+        super(MessageArea, self).__init__((self.width, self.height))
+        self._setup_messagebar()
+
+    def _setup_messagebar(self):
+        self.fill(self.bg_color)
+        self.msgsrc = pygame.font.SysFont(self.font, self.font_size)
+        self.surf = self.msgsrc.render(self.initial_text, True, self.fg_color)
+        self.blit(self.surf, (self.margin, self.left))
+
+    def display(self, text):
+        print text
+        self.fill(self.bg_color)
+        self.surf = self.msgsrc.render(text, True, self.fg_color)
+        self.blit(self.surf, (self.margin, self.left))
+
+    def clear(self):
+        self.surf.fill(self.bg_color)
+        self.fill(self.bg_color)
+        self.blit(self.surf, (self.margin, self.left))
+
 class Game(object):
     """A game board
     """
@@ -96,55 +147,86 @@ class Game(object):
         self.background = pygame.image.load('images/board.png').convert()
         self.tokens = {}
         self.board = Board()
-        self.state = STATE['start']
-        self._setup_messagebar()
+        self.state = STATE['blue_select']
+        self.messages = MessageArea(H_BGND, 0, 90, W, "BLUE'S TURN")
+        self.msg = self.messages.display
+        self.screen.blit(self.messages, (0, self.messages.top))
+        pygame.display.flip()
         self.tokens = pygame.sprite.LayeredUpdates()
+        self.current_color = BLUE
         self._setup_tokens()
         self.active_token = self.tokens.get_sprite(0)
         self.current_slot = self.board.slots[0]
-        self.current_color = BLUE
         self.active_token.selected = True
-
-    def _setup_messagebar(self):
-        self.msgsrc = pygame.font.SysFont(None, FONT_SIZE)
-        self.msgdest = pygame.Surface((W, H_MSG))
-        self.msgdest.fill(WHITE)
-        self.surf = self.msgsrc.render("START", True, BLACK)
-        self.msgdest.blit(self.surf, (10, 0))
-        self.screen.blit(self.msgdest, (0, H_BGND))
 
     def _setup_tokens(self):
         # set up tokens
         for t in tokens:
             token = Token(self.screen, COLOR_VALUE[t[0]], t[1])
+            if token.color == self.current_color:
+                token.selectable = True
+            else:
+                token.selectable = False
             self.tokens.add(token)
 
-    def msg(self, text):
-        print text
-        self.msgdest.fill(WHITE)
-        s = self.msgsrc.render(text, True, BLACK)
-        self.msgdest.blit(s, (0, 0))
-        self.screen.blit(self.msgdest, (0, H_BGND))
-        pygame.display.flip()
+    def homes_empty(self):
+        for t in self.tokens:
+            if t.pos in [i[1] for i in tokens]:
+                return False
+        return True
 
-    def token_select(self, token):
+    def select_token(self, token):
         """Put token in the selected state"""
-        token.selected = True
+        if (self.state == STATE['blue_select'] and token.color == BLUE) or \
+            (self.state == STATE['green_select'] and token.color == GREEN):
+            token.selected = True
+            self.active_token = token
+        else:
+            self.msg("Wrong token. Try again")
 
-    def token_move(self, token, to_slot):
-        """Move token to to_slot"""
-        token.move(to_slot)
+    def check_win(self):
+        "Check for a winner. Returns current color if winner is found or None"
+        green = [t.pos for t in self.tokens if t.color == GREEN]
+        blue = [t.pos for t in self.tokens if t.color == BLUE]
+        for trio in winners:
+            if set(trio) == set(green):
+                return "GREEN"
+            elif set(trio) == set(blue):
+                return "BLUE"
+        return None
 
+    def switch_turn(self):
+        winner = self.check_win()
+        if winner:
+            self.msg("%s WINS!" % (winner,))
+            return
+        if self.current_color == BLUE:
+            self.current_color = GREEN
+            c = 'GREEN'
+            self.state = STATE['green_select']
+        else:
+            c = 'BLUE'
+            self.current_color = BLUE
+            self.state = STATE['blue_select']
+        for token in self.tokens:
+            token.selected = False
+            self.active_token = None
+            if token.color == self.current_color:
+                self.selectable = True
+            else:
+                self.selectable = False
+        self.msg("%s'S TURN" % (c,))
+
+    # noinspection PyUnreachableCode
     def on_key_down(self, event):
         """Handle keyboard events"""
         if event.key == K_r:
             self.msg("Restarting")
             self.__init__()
-
-        if event.key == K_s:
-            self.msg("Starting game")
-            return
+            self.screen.blit(self.background, (0,0))
         if event.key in NUMKEYS:
+            print "Not implemented"
+            return
             to_slot = self.board.slots[NUMKEYS.index(event.key)]
             tlist = [i for i in self.tokens.sprites() if i.color == self.current_color]
             if to_slot.collidelist(tlist) != -1:
@@ -152,8 +234,11 @@ class Game(object):
                 return
             self.active_token.move((to_slot.x, to_slot.y))
             self.active_token.draw()
+            self.switch_turn()
             return
         if event.key == K_n:
+            print "Not implemented"
+            return
             if self.current_slot.nextslot.token:
                 self.msg("That space is occupied")
                 return
@@ -163,6 +248,8 @@ class Game(object):
             self.active_token.draw()
             return
         if event.key == K_p:
+            print "Not implemented"
+            return
             if self.current_slot.prevslot.token:
                 self.msg("That space is occupied")
                 return
@@ -171,42 +258,46 @@ class Game(object):
             self.active_token.move((self.current_slot.x, self.current_slot.y))
             self.active_token.draw()
             return
-        if event.key == K_ESCAPE:
-            self.active_token.selected = False
         if event.key == K_q:
             self.on_quit()
 
     def on_mousebutton_down(self, event):
         """Handle mouse events"""
         print "Click: %s" % (event.pos,)
+        # MOVE TOKEN
         # if a token has been selected previously, move it to the destination of the click
         # as long as the spot is not occupied
         hits = self.tokens.get_sprites_at(event.pos)
+        if len(hits) == 1 and self.active_token is None:
+            if not self.homes_empty() and hits[0].rect.collidelist(self.board.slots) != -1:
+                self.msg("You must move all of your tokens out of home first")
+                return
+            self.select_token(hits[0])
+            return
+        # SELECT TOKEN
+        if self.active_token is None:
+            self.msg("Please select a token")
+            return
         if self.active_token.selected:
             if len(hits) == 1:
+                # if we have clicked on the active token
                 if hits[0] is self.active_token:
-                    self.msg("To deselect a token, press the ESCAPE key")
                     return
                 else:
                     self.msg("That space is occupied")
                     return
             elif len(hits) == 0:
+                # a token is selected and the player must choose a destination
                 s = pygame.Rect((event.pos[0], event.pos[1], 20, 20))
                 hit = s.collidelist(self.board.slots)
                 if hit != -1:
                     self.active_token.selected = False
                     self.active_token.move((self.board.slots[hit].x, self.board.slots[hit].y))
-                    if self.current_color == BLUE:
-                        self.current_color = GREEN
-                    else:
-                        self.current_color = BLUE
-        else:
-            if len(hits) == 1:
-                self.active_token = hits[0]
-                self.active_token.selected = True
+                    self.switch_turn()
         return
 
     def on_quit(self):
+        pygame.quit()
         sys.exit()
 
 
@@ -232,6 +323,7 @@ def main(*args, **kwargs):
         game.tokens.clear(game.screen, game.background)
         game.tokens.draw(game.screen)
         game.tokens.update()
+        game.screen.blit(game.messages, (0, game.messages.top))
         pygame.display.flip()
         pygame.time.delay(100)
 
