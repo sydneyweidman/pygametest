@@ -1,4 +1,3 @@
-import time
 import optparse
 import sys
 import pygame
@@ -6,6 +5,11 @@ from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN
 from pygame.locals import K_n, K_q, K_r, K_p
 from pygame.locals import K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8
 from mapdata import stars, ring, tokens, winners, BLUE, GREEN, BLACK, WHITE, COLOR_VALUE, STATE
+from mapdata import LEGEND, SLOTS, BOARD, SLOT_IDX, VALID_MOVES, GRID
+
+class IllegalMove(Exception):
+    pass
+
 
 parser = optparse.OptionParser()
 
@@ -22,14 +26,28 @@ NUMKEYS = [K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8]
 
 
 class Slot(pygame.Rect):
-    def __init__(self, top, left, width=SLOT_SIZE, height=SLOT_SIZE,
+    def __init__(self, top=0, left=0, index=-1, content='*', width=SLOT_SIZE, height=SLOT_SIZE,
                  nextslot=None, prevslot=None, ctrslot=None, token=None):
         super(Slot, self).__init__((top, left, width, height))
+        self.name = None
+        self.index = index
+        self.content = content
         self.nextslot = nextslot
         self.prevslot = prevslot
         self.ctrslot = ctrslot
         self.token = token
 
+    def is_empty(self):
+        if self.content == '*':
+            return True
+        else:
+            return False
+
+    def valid_content(self):
+        if self.content in LEGEND:
+            return True
+        else:
+            return False
 
 class Board(object):
     """a collection of spaces through which a token can move"""
@@ -37,9 +55,33 @@ class Board(object):
     def __init__(self):
         self.slots = []
         self._setup_slots()
+        self.array = []
+        for v in GRID.splitlines():
+            row = list(v)
+            self.array.append(row)
+
+    def get_text_cell(self, cell):
+        return self.array[cell[0]][cell[1]]
+
+    def set_text_cell(self, cell, value):
+        if value not in LEGEND:
+            raise ValueError("Wrong value for text cell")
+        self.array[cell[0]][cell[1]] = value
+
+    def display_text(self):
+        tmp = []
+        s = ''
+        for l in self.array:
+            c = s.join(l)
+            tmp.append(c)
+        return '\n'.join(tmp)
 
     def _setup_slots(self):
-        center = Slot(*stars['center'])
+
+        center = Slot(*stars['center'],
+                      index=SLOT_IDX['center'],
+                      content='*')
+
         self.slots.append(center)
         for s in ring:
             self.slots.append(Slot(*stars[s]))
@@ -48,28 +90,19 @@ class Board(object):
             slot.prevslot = self.slots[(idx - 1) % len(self.slots)]
             slot.ctrslot = center
 
+class TextToken(object):
 
-class Token(pygame.sprite.Sprite):
-    """A peg in the board. 3 Tokens are placed on the board at the beginning of the game.
-    """
-    radius = int(TOKEN_SIZE / 2.0)
-
-    def __init__(self, screen, color, pos):
-        """
-        """
-        pygame.sprite.Sprite.__init__(self)
-        self.image = pygame.Surface((TOKEN_SIZE, TOKEN_SIZE))
-        self.screen = screen
-        self.pos = pos
+    def __init__(self, color, slot=None):
+        self.color = color
+        self.slot = slot
         self.color = color
         self.selectable = False
         self._selected = False
-        self.rect = pygame.draw.circle(self.screen, self.color, self.pos, self.radius, 0)
-        self.screen.blit(self.image, self.rect)
 
     @property
     def selected(self):
         return self._selected
+
 
     @selected.setter
     def selected(self, value):
@@ -79,6 +112,29 @@ class Token(pygame.sprite.Sprite):
             raise ValueError("The selected property must be True or False")
         if self.selectable and value == True:
             self._selected = True
+
+    def move(self, to_slot):
+        """Move the peg to a new position.
+        """
+        self.pos = to_slot
+        self.rect = to_slot
+
+
+class Token(pygame.sprite.Sprite, TextToken):
+    """A peg in the board. 3 Tokens are placed on the board at the beginning of the game.
+    """
+    radius = int(TOKEN_SIZE / 2.0)
+
+    def __init__(self, screen, color, pos):
+        """
+        """
+        pygame.sprite.Sprite.__init__(self)
+        TextToken.__init__(self, color)
+        self.image = pygame.Surface((TOKEN_SIZE, TOKEN_SIZE))
+        self.screen = screen
+        self.pos = pos
+        self.rect = pygame.draw.circle(self.screen, self.color, self.pos, self.radius, 0)
+        self.screen.blit(self.image, self.rect)
 
     def _draw(self):
         if self.selected:
@@ -92,12 +148,6 @@ class Token(pygame.sprite.Sprite):
 
     def update(self):
         self._draw()
-
-    def move(self, to_slot):
-        """Move the peg to a new position.
-        """
-        self.pos = to_slot
-        self.rect = to_slot
 
 
 class MessageArea(pygame.Surface):
@@ -121,6 +171,7 @@ class MessageArea(pygame.Surface):
 
     def _setup_messagebar(self):
         self.fill(self.bg_color)
+        pygame.font.init()
         self.msgsrc = pygame.font.SysFont(self.font, self.font_size)
         self.surf = self.msgsrc.render(self.initial_text, True, self.fg_color)
         self.blit(self.surf, (self.margin, self.left))
@@ -136,13 +187,14 @@ class MessageArea(pygame.Surface):
         self.fill(self.bg_color)
         self.blit(self.surf, (self.margin, self.left))
 
-class Game(object):
+class Game(Board):
     """A game board
     """
 
     def __init__(self, mode=(W, H)):
         """Create and initialize the game board
         """
+        super(Game, self).__init__()
         self.screen = pygame.display.set_mode(mode)
         self.background = pygame.image.load('images/board.png').convert()
         self.tokens = {}
@@ -156,7 +208,7 @@ class Game(object):
         self.current_color = BLUE
         self._setup_tokens()
         self.active_token = self.tokens.get_sprite(0)
-        self.current_slot = self.board.slots[0]
+        self.current_slot = self.slots[0]
         self.active_token.selected = True
 
     def _setup_tokens(self):
