@@ -5,13 +5,18 @@ from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN
 from pygame.locals import K_n, K_q, K_r, K_p
 from pygame.locals import K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8
 from mapdata import stars, ring, tokens, winners, BLUE, GREEN, BLACK, WHITE, COLOR_VALUE, STATE
-from mapdata import LEGEND, SLOTS, BOARD, SLOT_IDX, VALID_MOVES, GRID
+from mapdata import LEGEND, SLOTS, BOARD, SLOT_IDX, VALID_MOVES, GRID, TXT_COLOR, COLOR_NAME
 
 class IllegalMove(Exception):
     pass
 
+USAGE="""%(prog)s [OPTIONS]
 
-parser = optparse.OptionParser()
+Play the Stars strategy game
+"""
+
+parser = optparse.OptionParser(usage=USAGE)
+parser.add_option('-m', '--mode', help="Run game in MODE", default='text')
 
 H = 800
 W = 690
@@ -19,6 +24,7 @@ H_BGND = 710
 H_MSG = 9
 
 TOKEN_SIZE = 40
+TOKEN_COUNT = 3
 SLOT_SIZE = 20
 FONT_SIZE = 32
 
@@ -35,10 +41,19 @@ class Slot(pygame.Rect):
         self.nextslot = nextslot
         self.prevslot = prevslot
         self.ctrslot = ctrslot
-        self.token = token
+        self._token = token
+
+    @property
+    def token(self):
+        return self._token
+
+    @token.setter
+    def token(self, token):
+        self._token = token
+        self.content = TXT_COLOR[token.color]
 
     def is_empty(self):
-        if self.content == '*':
+        if self.content not in ['B','G']:
             return True
         else:
             return False
@@ -74,23 +89,54 @@ class Board(object):
         for l in self.array:
             c = s.join(l)
             tmp.append(c)
-        return '\n'.join(tmp)
+        self.msg('\n'.join(tmp))
 
     def _setup_slots(self):
-
         center = Slot(*stars['center'],
                       index=SLOT_IDX['center'],
-                      content='*')
-
+                      content=str(SLOT_IDX['center']))
         self.slots.append(center)
         for s in ring:
-            self.slots.append(Slot(*stars[s]))
+            self.slots.append(Slot(*stars[s], index=SLOT_IDX[s], content=str(SLOT_IDX[s])))
         for idx, slot in enumerate(self.slots):
             slot.nextslot = self.slots[(idx + 1) % len(self.slots)]
             slot.prevslot = self.slots[(idx - 1) % len(self.slots)]
             slot.ctrslot = center
 
-class TextToken(object):
+class TextMenuItem(object):
+
+    def __init__(self, label, accel, callback):
+        self.label = label
+        self.accel = accel
+        self.callable = callback
+
+    def activate(self, *args, **kwargs):
+        self.callback(*args, **kwargs)
+
+    def display(self):
+        print "%s: %s" % (self.accel, self.label,)
+
+class TextMenu(object):
+
+    def __init__(self, title, menu_items):
+        self.title = title
+        self.do = {}
+        self.menu_items = menu_items
+        for mi in self.menu_items:
+            self.do[mi.accel.upper()] = mi.callable
+
+    def display(self):
+        print self.title
+        for mi in self.menu_items:
+            mi.display()
+        choice = raw_input("Choice? ").upper()
+        if choice not in [mi.accel for mi in self.menu_items]:
+            print "Invalid choice"
+        else:
+            return choice
+
+
+class BaseToken(object):
 
     def __init__(self, color, slot=None):
         self.color = color
@@ -102,7 +148,6 @@ class TextToken(object):
     @property
     def selected(self):
         return self._selected
-
 
     @selected.setter
     def selected(self, value):
@@ -118,9 +163,12 @@ class TextToken(object):
         """
         self.pos = to_slot
         self.rect = to_slot
+        self.slot = to_slot
 
+    def draw(self):
+        return TXT_COLOR[self.color]
 
-class Token(pygame.sprite.Sprite, TextToken):
+class Token(pygame.sprite.Sprite, BaseToken):
     """A peg in the board. 3 Tokens are placed on the board at the beginning of the game.
     """
     radius = int(TOKEN_SIZE / 2.0)
@@ -129,7 +177,7 @@ class Token(pygame.sprite.Sprite, TextToken):
         """
         """
         pygame.sprite.Sprite.__init__(self)
-        TextToken.__init__(self, color)
+        BaseToken.__init__(self, color, pos)
         self.image = pygame.Surface((TOKEN_SIZE, TOKEN_SIZE))
         self.screen = screen
         self.pos = pos
@@ -187,39 +235,18 @@ class MessageArea(pygame.Surface):
         self.fill(self.bg_color)
         self.blit(self.surf, (self.margin, self.left))
 
-class Game(Board):
-    """A game board
-    """
+
+class BaseGame(Board):
 
     def __init__(self, mode=(W, H)):
-        """Create and initialize the game board
-        """
-        super(Game, self).__init__()
-        self.screen = pygame.display.set_mode(mode)
-        self.background = pygame.image.load('images/board.png').convert()
+        super(BaseGame, self).__init__()
         self.tokens = {}
-        self.board = Board()
-        self.state = STATE['blue_select']
-        self.messages = MessageArea(H_BGND, 0, 90, W, "BLUE'S TURN")
-        self.msg = self.messages.display
-        self.screen.blit(self.messages, (0, self.messages.top))
-        pygame.display.flip()
-        self.tokens = pygame.sprite.LayeredUpdates()
         self.current_color = BLUE
-        self._setup_tokens()
-        self.active_token = self.tokens.get_sprite(0)
-        self.current_slot = self.slots[0]
-        self.active_token.selected = True
-
-    def _setup_tokens(self):
-        # set up tokens
-        for t in tokens:
-            token = Token(self.screen, COLOR_VALUE[t[0]], t[1])
-            if token.color == self.current_color:
-                token.selectable = True
-            else:
-                token.selectable = False
-            self.tokens.add(token)
+        self.tokens[GREEN] = [BaseToken(GREEN) for i in range(TOKEN_COUNT)]
+        self.tokens[BLUE] = [BaseToken(BLUE) for i in range(TOKEN_COUNT)]
+        self.state = STATE['blue_select']
+        self.active_token = None
+        self.msg = getattr(__builtins__, 'print')
 
     def homes_empty(self):
         for t in self.tokens:
@@ -227,14 +254,33 @@ class Game(Board):
                 return False
         return True
 
-    def select_token(self, token):
+    def select_token(self, idx=None):
         """Put token in the selected state"""
+        if self.active_token:
+            self.msg("You have already selected a token. Press M to move")
+            return
+        token = self.get_token_at(idx)
+        if not token:
+            token = self.tokens[self.current_color].pop()
         if (self.state == STATE['blue_select'] and token.color == BLUE) or \
-            (self.state == STATE['green_select'] and token.color == GREEN):
+                (self.state == STATE['green_select'] and token.color == GREEN):
             token.selected = True
             self.active_token = token
         else:
-            self.msg("Wrong token. Try again")
+            self.msg("Wrong token. Try again. It is %s's turn" % (COLOR_NAME[self.current_color].upper(),))
+
+    def get_token_at(self, idx):
+        for s in self.slots:
+            if s.index == idx:
+                return s.token
+        return None
+
+    def move_token(self, dst):
+        if self.active_token:
+            self.msg("Moving from %s to %s " % (src, dst))
+            self.active_token.move(dst)
+        else:
+            self.msg("Please select a token first")
 
     def check_win(self):
         "Check for a winner. Returns current color if winner is found or None"
@@ -269,7 +315,47 @@ class Game(Board):
                 self.selectable = False
         self.msg("%s'S TURN" % (c,))
 
-    # noinspection PyUnreachableCode
+
+class Game(BaseGame):
+    """A game board
+    """
+
+    def __init__(self, mode=(W, H)):
+        """Create and initialize the game board
+        """
+        super(Game, self).__init__()
+        self.screen = pygame.display.set_mode(mode)
+        self.background = pygame.image.load('images/board.png').convert()
+        self.messages = MessageArea(H_BGND, 0, 90, W, "BLUE'S TURN")
+        self.msg = self.messages.display
+        self.screen.blit(self.messages, (0, self.messages.top))
+        pygame.display.flip()
+        self.tokens = pygame.sprite.LayeredUpdates()
+        self.current_color = BLUE
+        self._setup_tokens()
+        self.active_token = self.tokens.get_sprite(0)
+        self.current_slot = self.slots[0]
+        self.active_token.selected = True
+
+    def _setup_tokens(self):
+        # set up tokens
+        for t in tokens:
+            token = Token(self.screen, COLOR_VALUE[t[0]], t[1])
+            if token.color == self.current_color:
+                token.selectable = True
+            else:
+                token.selectable = False
+            self.tokens.add(token)
+
+    def select_token(self, token):
+        """Put token in the selected state"""
+        if (self.state == STATE['blue_select'] and token.color == BLUE) or \
+                (self.state == STATE['green_select'] and token.color == GREEN):
+            token.selected = True
+            self.active_token = token
+        else:
+            self.msg("Wrong token. Try again. It is %s's turn" % (COLOR_NAME[self.current_color].upper(),))
+
     def on_key_down(self, event):
         """Handle keyboard events"""
         if event.key == K_r:
@@ -279,36 +365,11 @@ class Game(Board):
         if event.key in NUMKEYS:
             print "Not implemented"
             return
-            to_slot = self.board.slots[NUMKEYS.index(event.key)]
-            tlist = [i for i in self.tokens.sprites() if i.color == self.current_color]
-            if to_slot.collidelist(tlist) != -1:
-                self.msg("That space is occupied")
-                return
-            self.active_token.move((to_slot.x, to_slot.y))
-            self.active_token.draw()
-            self.switch_turn()
-            return
         if event.key == K_n:
             print "Not implemented"
             return
-            if self.current_slot.nextslot.token:
-                self.msg("That space is occupied")
-                return
-            self.current_slot = self.current_slot.nextslot
-            self.screen.blit(self.background, (0, 0))
-            self.active_token.move((self.current_slot.x, self.current_slot.y))
-            self.active_token.draw()
-            return
         if event.key == K_p:
             print "Not implemented"
-            return
-            if self.current_slot.prevslot.token:
-                self.msg("That space is occupied")
-                return
-            self.current_slot = self.current_slot.prevslot
-            self.screen.blit(self.background, (0, 0))
-            self.active_token.move((self.current_slot.x, self.current_slot.y))
-            self.active_token.draw()
             return
         if event.key == K_q:
             self.on_quit()
@@ -321,7 +382,7 @@ class Game(Board):
         # as long as the spot is not occupied
         hits = self.tokens.get_sprites_at(event.pos)
         if len(hits) == 1 and self.active_token is None:
-            if not self.homes_empty() and hits[0].rect.collidelist(self.board.slots) != -1:
+            if not self.homes_empty() and hits[0].rect.collidelist(self.slots) != -1:
                 self.msg("You must move all of your tokens out of home first")
                 return
             self.select_token(hits[0])
@@ -341,10 +402,10 @@ class Game(Board):
             elif len(hits) == 0:
                 # a token is selected and the player must choose a destination
                 s = pygame.Rect((event.pos[0], event.pos[1], 20, 20))
-                hit = s.collidelist(self.board.slots)
+                hit = s.collidelist(self.slots)
                 if hit != -1:
                     self.active_token.selected = False
-                    self.active_token.move((self.board.slots[hit].x, self.board.slots[hit].y))
+                    self.active_token.move((self.slots[hit].x, self.slots[hit].y))
                     self.switch_turn()
         return
 
@@ -352,6 +413,21 @@ class Game(Board):
         pygame.quit()
         sys.exit()
 
+def text_main_loop():
+
+    game = BaseGame()
+    move = TextMenuItem('Move', 'M', game.move_token)
+    select = TextMenuItem('Select', 'S', game.select_token)
+    display = TextMenuItem('Display board', 'D', game.display_text)
+    quit = TextMenuItem('Quit', 'Q', sys.exit)
+    main_menu = TextMenu("Stars Main Menu", [display, select, move, quit])
+    while True:
+        choice = main_menu.display()
+        game.msg("Chose %s" % (choice,))
+        try:
+            main_menu.do[choice]()
+        except KeyError:
+            game.msg("Invalid choice. Try again.")
 
 def main(*args, **kwargs):
     """Start the main loop
@@ -382,4 +458,6 @@ def main(*args, **kwargs):
 
 if __name__ == '__main__':
     (opts, cli_args) = parser.parse_args()
+    if opts.mode == 'text':
+        text_main_loop()
     sys.exit(main(*cli_args, **opts.__dict__))

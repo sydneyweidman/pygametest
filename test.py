@@ -2,7 +2,24 @@ __author__ = 'sweidman'
 
 import unittest
 import mapdata
-from game import Game, Slot
+from game import Game, Slot, BaseToken
+
+class TestTextToken(unittest.TestCase):
+
+    def setUp(self):
+        self.slot = Slot(index=9)
+        self.token = BaseToken(mapdata.BLUE)
+
+    def test_draw(self):
+        assert self.token.draw() == 'B'
+
+    def test_set_slot(self):
+        self.slot.token = self.token
+        assert self.slot.content == 'B'
+
+    def tearDown(self):
+        pass
+
 
 class TestSlot(unittest.TestCase):
 
@@ -11,6 +28,15 @@ class TestSlot(unittest.TestCase):
 
     def test_slot_empty(self):
         assert self.slot.is_empty()
+
+    def test_slot_not_empty(self):
+        self.slot.content = 'B'
+        assert not self.slot.is_empty()
+
+class TestTextMenu(unittest.TestCase):
+
+    def setUp(self):
+        test.menu = TextMenu()
 
 class TestGame(unittest.TestCase):
 
@@ -27,7 +53,7 @@ class TestGame(unittest.TestCase):
 
     def test_ascii_grid(self):
         for cell in mapdata.ASCII_GRID:
-            assert self.game.get_text_cell(cell) == '*'
+            assert self.game.get_text_cell(cell) in mapdata.LEGEND
 
 if __name__ == '__main__':
     unittest.main()
