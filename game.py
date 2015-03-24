@@ -4,7 +4,7 @@ import pygame
 from pygame.locals import QUIT, KEYDOWN, MOUSEBUTTONDOWN
 from pygame.locals import K_n, K_q, K_r, K_p
 from pygame.locals import K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8
-from mapdata import stars, ring, tokens, winners, BLUE, GREEN, BLACK, WHITE, COLOR_VALUE, STATE
+from mapdata import stars, ring, tokens, winners, BLUE, GREEN, BLACK, WHITE, COLOR_VALUE, STATE, ASCII_GRID
 from mapdata import LEGEND, SLOTS, BOARD, SLOT_IDX, VALID_MOVES, GRID, TXT_COLOR, COLOR_NAME
 
 class IllegalMove(Exception):
@@ -30,12 +30,15 @@ FONT_SIZE = 32
 
 NUMKEYS = [K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8]
 
+class BaseSlot(object):
 
-class Slot(pygame.Rect):
     def __init__(self, top=0, left=0, index=-1, content='*', width=SLOT_SIZE, height=SLOT_SIZE,
-                 nextslot=None, prevslot=None, ctrslot=None, token=None):
-        super(Slot, self).__init__((top, left, width, height))
-        self.name = None
+                 nextslot=None, prevslot=None, ctrslot=None, token=None, name=None):
+        self.top = top
+        self.left = left
+        self.width = width
+        self.height = height
+        self.name = name
         self.index = index
         self.content = content
         self.nextslot = nextslot
@@ -52,17 +55,60 @@ class Slot(pygame.Rect):
         self._token = token
         self.content = TXT_COLOR[token.color]
 
+
     def is_empty(self):
-        if self.content not in ['B','G']:
+        if self.content not in ['B', 'G']:
             return True
         else:
             return False
+
 
     def valid_content(self):
         if self.content in LEGEND:
             return True
         else:
             return False
+        self.name = None
+        self.index = index
+        self.content = content
+        self.nextslot = nextslot
+        self.prevslot = prevslot
+        self.ctrslot = ctrslot
+        self._token = token
+
+
+    @property
+    def token(self):
+        return self._token
+
+
+    @token.setter
+    def token(self, token):
+        self._token = token
+        self.content = TXT_COLOR[token.color]
+
+
+    def is_empty(self):
+        if self.content not in ['B', 'G']:
+            return True
+        else:
+            return False
+
+
+    def valid_content(self):
+        if self.content in LEGEND:
+            return True
+        else:
+            return False
+
+
+class Slot(pygame.Rect, BaseSlot):
+
+    def __init__(self, top=0, left=0, index=-1, content='*', width=SLOT_SIZE, height=SLOT_SIZE,
+                 nextslot=None, prevslot=None, ctrslot=None, token=None):
+        pygame.Rect.__init__(self, top, left, width, height)
+        BaseSlot.__init__(self, top, left, index, content, width, height, nextslot, prevslot,
+                          ctrslot, token)
 
 class Board(object):
     """a collection of spaces through which a token can move"""
@@ -275,10 +321,19 @@ class BaseGame(Board):
                 return s.token
         return None
 
-    def move_token(self, dst):
+    def move_token(self, slot=None):
+        while not slot:
+            idx = raw_input('To which location? ')
+            try:
+                slot = ASCII_GRID[int(idx)]
+                return
+            except IndexError:
+                self.msg("You can't move to that space.")
+
         if self.active_token:
-            self.msg("Moving from %s to %s " % (src, dst))
-            self.active_token.move(dst)
+            src = self.active_token.slot
+            self.msg("Moving from %s to %s " % (src, slot))
+            self.active_token.move(slot)
         else:
             self.msg("Please select a token first")
 
