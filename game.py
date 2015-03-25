@@ -46,6 +46,9 @@ class BaseSlot(object):
         self.ctrslot = ctrslot
         self._token = token
 
+    def __str__(self):
+        return self.content
+
     @property
     def token(self):
         return self._token
@@ -53,8 +56,7 @@ class BaseSlot(object):
     @token.setter
     def token(self, token):
         self._token = token
-        self.content = TXT_COLOR[token.color]
-
+        self.content = "%s%s" % (TXT_COLOR[token.color], self.index)
 
     def is_empty(self):
         if self.content not in ['B', 'G']:
@@ -62,20 +64,11 @@ class BaseSlot(object):
         else:
             return False
 
-
     def valid_content(self):
         if self.content in LEGEND:
             return True
         else:
             return False
-        self.name = None
-        self.index = index
-        self.content = content
-        self.nextslot = nextslot
-        self.prevslot = prevslot
-        self.ctrslot = ctrslot
-        self._token = token
-
 
     @property
     def token(self):
@@ -125,8 +118,8 @@ class Board(object):
         return self.array[cell[0]][cell[1]]
 
     def set_text_cell(self, cell, value):
-        if value not in LEGEND:
-            raise ValueError("Wrong value for text cell")
+        # if value not in LEGEND:
+        #     raise ValueError("Wrong value for text cell")
         self.array[cell[0]][cell[1]] = value
 
     def display_text(self):
@@ -184,10 +177,10 @@ class TextMenu(object):
 
 class BaseToken(object):
 
-    def __init__(self, color, slot=None):
+    def __init__(self, color, slot=None, name=None):
         self.color = color
         self.slot = slot
-        self.color = color
+        self.name = name
         self.selectable = False
         self._selected = False
 
@@ -292,7 +285,7 @@ class BaseGame(Board):
         self.tokens[BLUE] = [BaseToken(BLUE) for i in range(TOKEN_COUNT)]
         self.state = STATE['blue_select']
         self.active_token = None
-        self.msg = getattr(__builtins__, 'print')
+        self.msg = __builtins__['print']
 
     def homes_empty(self):
         for t in self.tokens:
@@ -322,18 +315,23 @@ class BaseGame(Board):
         return None
 
     def move_token(self, slot=None):
+        self.display_text()
         while not slot:
             idx = raw_input('To which location? ')
             try:
-                slot = ASCII_GRID[int(idx)]
-                return
-            except IndexError:
+                slot = self.slots[int(idx)]
+            except (IndexError, ValueError):
                 self.msg("You can't move to that space.")
 
         if self.active_token:
-            src = self.active_token.slot
+            src = getattr(self.active_token, 'slot', 'home')
             self.msg("Moving from %s to %s " % (src, slot))
             self.active_token.move(slot)
+            self.active_token.slot = slot
+            self.set_text_cell(slot, self.active_token.name)
+            slot.token = self.active_token
+            self.active_token = None
+            self.switch_turn()
         else:
             self.msg("Please select a token first")
 
