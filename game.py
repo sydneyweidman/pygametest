@@ -26,7 +26,7 @@ H_MSG = 9
 
 TOKEN_SIZE = 40
 TOKEN_COUNT = 3
-SLOT_SIZE = 20
+SLOT_SIZE = 10
 FONT_SIZE = 32
 
 NUMKEYS = [K_0, K_1, K_2, K_3, K_4, K_5, K_6, K_7, K_8]
@@ -106,7 +106,7 @@ class Token(pygame.sprite.Sprite):
     def move(self, to_slot):
         """Move the peg to a new position.
         """
-        self.pos = (to_slot.centerx, to_slot.centery)
+        self.pos = (to_slot.left, to_slot.top)
         self.slot = to_slot
         self.slot.token = self
 
