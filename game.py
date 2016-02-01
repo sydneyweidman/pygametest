@@ -10,8 +10,6 @@ from mapdata import HOME, COLOR_NAME
 class IllegalMove(Exception):
     pass
 
-TOK_HOMES = HOME[BLUE] + HOME[GREEN]
-
 USAGE="""%(prog)s [OPTIONS]
 
 Play the Stars strategy game
@@ -152,14 +150,6 @@ class MessageArea(pygame.Surface):
 class Game(object):
     """A game board
     """
-    winslots = []
-
-    @classmethod
-    def mkwinners(cls):
-        print "Calling mkwinners"
-        for w in winners:
-            winner = [pygame.Rect(s[0], s[1], SLOT_SIZE, SLOT_SIZE) for s in w]
-            cls.winslots.append(winner)
 
     def __init__(self, mode=(W, H)):
         """Create and initialize the game board
@@ -178,7 +168,6 @@ class Game(object):
         self._setup_tokens()
         self.active_token = [i for i in self.tokens if i.color == self.current_color][0]
         self.active_token.selected = True
-        self.mkwinners()
 
     def _setup_slots(self):
         center = Slot(*stars['center'])
@@ -201,9 +190,9 @@ class Game(object):
                     t.selectable = False
                 self.tokens.add(t)
 
-    def homes_empty(self):
+    def homes_empty(self, color):
         for t in self.tokens:
-            if t.pos in [i[1] for i in TOK_HOMES]:
+            if t.color == color and t.pos in HOME[color]:
                 return False
         return True
 
@@ -228,15 +217,14 @@ class Game(object):
 
     def check_win(self):
         print "Checking for a winner..."
-        green = [t.rect for t in self.tokens if t.color == GREEN]
-        blue = [t.rect for t in self.tokens if t.color == BLUE]
-        for winner in self.winslots:
-            if all([t.collidelist(winner) > -1 for t in green]):
-                return "GREEN"
-            elif all([t.collidelist(winner) > -1 for t in blue]):
-                return "BLUE"
-            else:
-                return None
+        green = set([t.pos for t in self.tokens if t.color == GREEN])
+        blue = set([t.pos for t in self.tokens if t.color == BLUE])
+        if green in winners:
+            return "GREEN"
+        elif blue in winners:
+            return "BLUE"
+        else:
+            return None
 
     def switch_turn(self):
         winner = self.check_win()
@@ -281,35 +269,30 @@ class Game(object):
     def on_mousebutton_down(self, event):
         """Handle mouse events"""
         print "Click: %s" % (event.pos,)
-        # MOVE TOKEN
-        # if a token has been selected previously, move it to the destination of the click
-        # as long as the spot is not occupied
         hits = self.tokens.get_sprites_at(event.pos)
-        if len(hits) == 1 and self.active_token is None:
-            if not self.homes_empty() and hits[0].rect.collidelist(self.slots) != -1:
-                self.msg("You must move all of your tokens out of home first")
-                return
-            self.select_token(hits[0])
-            return
         # SELECT TOKEN
-        if self.active_token is None:
-            self.msg("Please select a token")
-            return
-        if self.active_token.selected:
-            if len(hits) == 1:
+        if len(hits) == 1:
+            if self.active_token is None:
+                # If I am trying to move a token on the board before I have moved all my tokens out of home
+                if hits[0].pos not in HOME[self.current_color] and not self.homes_empty(self.current_color):
+                    self.msg("You must move all your tokens out of home first")
+                    return
+                self.select_token(hits[0])
+                return
+            elif self.active_token.selected:
                 # if we have clicked on the active token
                 if hits[0] is self.active_token:
                     return
                 else:
                     self.msg("That space is occupied")
                     return
-            elif len(hits) == 0:
-                # a token is selected and the player must choose a destination
-                s = pygame.Rect((event.pos[0], event.pos[1], 40, 40))
-                hit = s.collidelist(self.slots)
-                if hit != -1:
-                    self.active_token.selected = False
-                    self.move_token(self.slots[hit])
+        elif len(hits) == 0:
+            # a token is selected and the player must choose a destination
+            s = pygame.Rect((event.pos[0], event.pos[1], 40, 40))
+            slot = s.collidelist(self.slots)
+            if slot != -1:
+                self.active_token.selected = False
+                self.move_token(self.slots[slot])
         return
 
     def on_quit(self):

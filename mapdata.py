@@ -4,9 +4,6 @@ SLOTS = ('top_left', 'top_right', 'right_upper', 'right_lower',
          'bottom_right', 'bottom_left', 'left_lower', 'left_upper',
          'center',)
 
-SLOT_IDX = dict(top_left=0, top_right=1, right_upper=2, right_lower=3, bottom_right=4, bottom_left=5, left_lower=6,
-                left_upper=7, center=8)
-
 STATE = {
     'blue_select': 1,
     'blue_move': 2,
@@ -30,10 +27,10 @@ stars = dict(center=(345, 355),
              left_upper=(18, 491),
              )
 
-winners = [(stars['top_left'], stars['center'], stars['bottom_right']),
-           (stars['top_right'], stars['center'], stars['bottom_left']),
-           (stars['right_upper'], stars['center'], stars['left_lower']),
-           (stars['right_lower'], stars['center'], stars['left_upper']),
+winners = [set((stars['top_left'], stars['center'], stars['bottom_right'])),
+           set((stars['top_right'], stars['center'], stars['bottom_left'])),
+           set((stars['right_upper'], stars['center'], stars['left_lower'])),
+           set((stars['right_lower'], stars['center'], stars['left_upper'])),
            ]
 
 ring = SLOTS[:-1]
